@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Network Inspector (Render)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 20px; max-width: 1100px; margin: auto; }
+    input[type="url"] { width: 70%; padding: 8px; font-size: 16px; }
+    button { padding: 8px 12px; font-size: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { padding: 8px; border: 1px solid #ddd; text-align: left; font-size: 14px; }
+    th { background: #f4f4f4; }
+    .muted { color: #666; font-size: 13px; }
+    .error { color: #b00020; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 10px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Network Inspector (Render)</h1>
+  <p class="muted">Enter a public URL and the server will fetch the page, extract resource URLs and probe each one (status, size, content-type, timing). Dynamic JS requests (XHR/fetch) are not captured.</p>
+
+  <div>
+    <input id="url" type="url" placeholder="https://example.com" value="" />
+    <button id="go">Inspect</button>
+  </div>
+
+  <div id="status" style="margin-top:12px"></div>
+  <div id="results" style="margin-top:18px"></div>
+
+  <script>
+    const go = document.getElementById('go');
+    const urlInput = document.getElementById('url');
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+
+    async function inspect(url) {
+      statusEl.textContent = 'Fetching and analyzing...';
+      resultsEl.innerHTML = '';
+      try {
+        const resp = await fetch('/api/inspect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          statusEl.innerHTML = '<div class="error">Error: ' + (data.error || JSON.stringify(data)) + '</div>';
+          return;
+        }
+        statusEl.innerHTML = `<div>Fetched: <strong>${data.fetchedUrl}</strong> — main status: ${data.main ? data.main.status : 'N/A'} (${data.main && data.main.contentType ? data.main.contentType : 'unknown'})</div>`;
+        const rows = data.resources.map(r => {
+          return `<tr>
+            <td style="max-width:420px;overflow:hidden;"><a href="${r.url}" target="_blank" rel="noreferrer noopener">${r.url}</a></td>
+            <td>${r.initiator || ''}</td>
+            <td>${r.status !== null ? r.status : ''}</td>
+            <td>${r.contentType || ''}</td>
+            <td>${r.size !== null ? r.size : ''}</td>
+            <td>${r.timeMs !== null ? r.timeMs + ' ms' : ''}</td>
+            <td>${r.error ? '<span class="error">'+r.error+'</span>' : ''}</td>
+          </tr>`;
+        }).join('');
+        resultsEl.innerHTML = `
+          <h3>Resources (${data.resources.length})</h3>
+          <table>
+            <thead><tr><th>URL</th><th>Initiator</th><th>Status</th><th>Content-Type</th><th>Size (bytes)</th><th>Time</th><th>Error</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <h4 style="margin-top:16px">Note</h4>
+          <pre>${data.note}</pre>
+        `;
+      } catch (err) {
+        statusEl.innerHTML = '<div class="error">Exception: ' + err.message + '</div>';
+      }
+    }
+
+    go.addEventListener('click', () => {
+      const u = (urlInput.value || '').trim();
+      if (!u) {
+        statusEl.innerHTML = '<div class="error">Please enter a URL</div>';
+        return;
+      }
+      inspect(u);
+    });
+
+    urlInput.value = 'https://example.com';
+  </script>
+</body>
+</html>
